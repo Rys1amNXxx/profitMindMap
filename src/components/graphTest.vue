@@ -54,13 +54,6 @@ const style = document.createElement('style');
 style.innerHTML = `@import url('${iconfont.css}');`;
 document.head.appendChild(style);
 
-const COLORS = {
-  B: '#1783FF',
-  R: '#F46649',
-  Y: '#DB9D0D',
-  G: '#60C42D',
-  DI: '#A7A7A7',
-};
 const GREY_COLOR = '#CED4D9';
 const TITLE_TAG_GAP = 8;
 const TAG_HORIZONTAL_PADDING = 12;
@@ -69,9 +62,7 @@ const TAG_MIN_WIDTH = 36;
 
 const COLLAPSED_SIZE: [number, number] = [288, 72];
 const EXPANDED_SIZE: [number, number] = [288, 180];
-const BASE_VERTICAL_GAP = 10;
-const EXPANDED_VERTICAL_GAP = 12;
-const BASE_HORIZONTAL_GAP = 50;
+const BASE_HORIZONTAL_GAP = 35;
 const COLLAPSE_TARGET_NAME = 'collapse-button';
 const HOVER_TOOLTIP_KEY = 'node-hover-tooltip';
 const CLICK_TOOLTIP_KEY = 'node-click-tooltip';
@@ -436,39 +427,49 @@ class TreeNode extends Rect {
 
 register(ExtensionCategory.NODE, 'tree-node', TreeNode);
 
-// 自定义边：在边的两端显示标签（百分比）
+// 自定义边：在边的终点显示标签（百分比）
 class LabelEdge extends Polyline {
   render(attributes: any = this.parsedAttributes, container?: any) {
     super.render(attributes, container);
-    this.drawEndLabel(attributes, container, 'start');
-    this.drawEndLabel(attributes, container, 'end');
+    // 只在终点（子节点侧）显示百分比
+    this.drawEndLabel(attributes, container);
   }
 
-  drawEndLabel(attributes: any, container: any, type: 'start' | 'end') {
-    const key = type === 'start' ? 'startLabel' : 'endLabel';
+  drawEndLabel(attributes: any, container: any) {
+    const style = subStyleProps(attributes, 'endLabel');
+    const text = style?.text;
+
+    // 如果没有文本，则不显示标签
+    if (!text) {
+      this.upsert('label-end', GText, false, container);
+      return;
+    }
+
+    // 获取边的路径点
     const points = this.getPoints(attributes);
-    if (!points || points.length === 0) return;
+    if (!points || points.length === 0) {
+      this.upsert('label-end', GText, false, container);
+      return;
+    }
 
-    // 获取起点或终点坐标
-    const point = type === 'start' ? points[0] : points[points.length - 1];
-    if (!point) return;
+    // 获取终点坐标（连接到目标节点的端点）
+    const endpoints = this.getEndpoints(attributes);
+    const [x, y] = endpoints[1]; // 终点
 
-    const [x, y] = this.getEndpoints(attributes)[type === 'start' ? 0 : 1];;
-
+    // 标签样式：在终点左侧显示，向上偏移
     const fontStyle = {
       x,
       y,
-      dy: type === 'start' ? -10 : -10, // 向上偏移
-      dx: type === 'start' ? 15 : -15,  // 起点向右，终点向左
+      dy: -10,           // 向上偏移10px
+      dx: -15,           // 向左偏移15px，避免与节点重叠
       fontSize: 12,
       fill: '#666',
       textBaseline: 'middle' as const,
-      textAlign: (type === 'start' ? 'left' : 'right') as const,
+      textAlign: 'right' as const,  // 右对齐，因为标签在节点左侧
+      text,
     };
 
-    const style = subStyleProps(attributes, key);
-    const text = style?.text;
-    this.upsert(`label-${type}`, GText, text ? { ...fontStyle, ...style, text } : false, container);
+    this.upsert('label-end', GText, { ...fontStyle, ...style }, container);
   }
 }
 
@@ -500,7 +501,8 @@ const initGraph = async () => {
       getNodeData: (datum, depth) => {
         if (!datum.style) datum.style = {};
         datum.style.size = [...COLLAPSED_SIZE];
-        datum.style.collapsed = depth >= 2;
+        // 只在第4层及以后才默认折叠，让前三层都能正常显示
+        datum.style.collapsed = depth >= 5;
         if (typeof datum.style.expanded === 'undefined') {
           datum.style.expanded = false;
         }
@@ -508,6 +510,24 @@ const initGraph = async () => {
         if (!datum.children) return datum;
         const { children, ...restDatum } = datum;
         return { ...restDatum, children: children.map((child) => child.id) };
+      },
+      getEdgeData: (source, target) => {
+        // 如果目标节点有 rate 数据，则在边线终点显示百分比
+        const rate = target?.rate;
+        if (rate !== undefined && rate !== null) {
+          const percentage = (rate * 100).toFixed(1) + '%';
+          return {
+            source: source.id,
+            target: target.id,
+            style: {
+              endLabelText: percentage,
+            }
+          };
+        }
+        return {
+          source: source.id,
+          target: target.id,
+        };
       },
     }),
     node: {
@@ -529,7 +549,6 @@ const initGraph = async () => {
         endArrow: true,
         endArrowType: 'circle',
         radius: 8,
-        endLabelText: '100%',
       },
     },
     layout: {
@@ -559,11 +578,9 @@ const initGraph = async () => {
           return COLLAPSED_SIZE[0];
         }
       },
-      getVGap: (node?: any) => {
-        if (!node) return BASE_VERTICAL_GAP;
-        const nodeId = typeof node === 'string' ? node : node.id ?? node.data?.id;
-        if (!nodeId) return BASE_VERTICAL_GAP;
-        return nodeHasChildrenMap.get(nodeId) ? EXPANDED_VERTICAL_GAP : BASE_VERTICAL_GAP;
+      getVGap: () => {
+        // 使用固定的垂直间距
+        return 20;
       },
       getHGap: () => BASE_HORIZONTAL_GAP,
     },
@@ -595,6 +612,13 @@ const initGraph = async () => {
       clickTooltip?.hide?.();
       hoverTooltip?.hide?.();
     }
+  });
+
+  // 监听节点展开/折叠后的布局更新事件，重新渲染边以更新标签位置
+  graph.on(GraphEvent.AFTER_LAYOUT, () => {
+    // 布局完成后，强制更新所有边的渲染
+    // 使用 draw 方法重新绘制图形
+    graph.draw();
   });
 
   graph.render();
