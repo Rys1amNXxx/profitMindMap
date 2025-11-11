@@ -181,12 +181,6 @@ function createHoverTooltipPlugin(this: Graph) {
       if (isCollapseTarget(evt)) return '';
       return `<div class="node-tooltip-hint">点击查看详细信息</div>`;
     },
-    onOpenChange(open: boolean) {
-      if (open) {
-        const clickTooltip = graph.getPluginInstance(CLICK_TOOLTIP_KEY) as any;
-        clickTooltip?.hide?.();
-      }
-    },
   };
 }
 
@@ -598,6 +592,16 @@ const initGraph = async () => {
   // 保存 graph 实例引用
   graphInstance = graph;
 
+  const hideClickTooltip = () => {
+    const clickTooltip = graph.getPluginInstance(CLICK_TOOLTIP_KEY) as any;
+    clickTooltip?.hide?.();
+  };
+
+  const hideHoverTooltip = () => {
+    const hoverTooltip = graph.getPluginInstance(HOVER_TOOLTIP_KEY) as any;
+    hoverTooltip?.hide?.();
+  };
+
   graph.once(GraphEvent.AFTER_RENDER, () => {
     graph.fitView();
   });
@@ -607,11 +611,14 @@ const initGraph = async () => {
     const sourceEvent = evt?.originalEvent ?? evt?.event ?? evt;
     if (isCollapseTarget(sourceEvent)) {
       evt?.preventDefault?.();
-      const clickTooltip = graph.getPluginInstance(CLICK_TOOLTIP_KEY) as any;
-      const hoverTooltip = graph.getPluginInstance(HOVER_TOOLTIP_KEY) as any;
-      clickTooltip?.hide?.();
-      hoverTooltip?.hide?.();
+      hideClickTooltip();
+      hideHoverTooltip();
     }
+  });
+
+  graph.on('canvas:click', () => {
+    hideClickTooltip();
+    hideHoverTooltip();
   });
 
   // 监听节点展开/折叠后的布局更新事件，重新渲染边以更新标签位置
