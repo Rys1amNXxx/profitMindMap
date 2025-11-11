@@ -571,7 +571,16 @@ const initGraph = async () => {
         endArrow: true,
         endArrowType: 'circle',
         radius: 8,
-        // labelText: '100%',
+        // 标签样式配置
+        // labelText: '',
+        labelFontSize: 12,
+        labelFill: '#666',
+        labelBackground: false,
+        labelPadding: 0,
+        labelOffsetX: -15,  // 向左偏移
+        labelOffsetY: -10,   // 向上偏移
+        labelPlacement: 'end', // 标签位置在终点
+        labelAutoRotate: false, // 不自动旋转
       },
     },
     layout: {
