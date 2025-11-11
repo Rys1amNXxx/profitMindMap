@@ -421,81 +421,7 @@ class TreeNode extends Rect {
 
 register(ExtensionCategory.NODE, 'tree-node', TreeNode);
 
-// 自定义边：在边的终点显示标签（百分比）
-class LabelEdge extends Polyline {
-  private layoutListener?: () => void;
-
-  private ensureLayoutListener() {
-    if (this.layoutListener) return;
-    const graph = this.context?.graph;
-    if (!graph?.on) return;
-    this.layoutListener = () => {
-      this.drawEndLabel(this.parsedAttributes, this);
-    };
-    graph.on(GraphEvent.AFTER_LAYOUT, this.layoutListener);
-  }
-
-  render(attributes: any = this.parsedAttributes, container: any = this) {
-    this.ensureLayoutListener();
-    super.render(attributes, container);
-    // 只在终点（子节点侧）显示百分比
-    this.drawEndLabel(attributes, container);
-  }
-
-  update(attributes: any = this.parsedAttributes, container: any = this) {
-    super.update(attributes);
-    this.drawEndLabel(this.parsedAttributes, container);
-  }
-
-  destroy(): void {
-    const graph = this.context?.graph;
-    if (this.layoutListener && graph?.off) {
-      graph.off(GraphEvent.AFTER_LAYOUT, this.layoutListener);
-      this.layoutListener = undefined;
-    }
-    super.destroy();
-  }
-
-  drawEndLabel(attributes: any, container: any) {
-    const targetContainer = container ?? this;
-    const style = subStyleProps(attributes, 'endLabel');
-    const text = style?.text;
-
-    // 如果没有文本，则不显示标签
-    if (!text) {
-      this.upsert('label-end', GText, false, targetContainer);
-      return;
-    }
-
-    // 获取边的路径点
-    const points = this.getPoints(attributes);
-    if (!points || points.length === 0) {
-      this.upsert('label-end', GText, false, targetContainer);
-      return;
-    }
-
-    // 获取终点坐标（连接到目标节点的端点）
-    const endpoints = this.getEndpoints(attributes);
-    const [x, y] = endpoints[1]; // 终点
-
-    // 标签样式：在终点左侧显示，向上偏移
-    const fontStyle = {
-      x,
-      y,
-      dy: -10,           // 向上偏移10px
-      dx: -15,           // 向左偏移15px，避免与节点重叠
-      fontSize: 12,
-      fill: '#666',
-      textBaseline: 'middle' as const,
-      textAlign: 'right' as const,  // 右对齐，因为标签在节点左侧
-      text,
-    };
-
-    this.upsert('label-end', GText, { ...fontStyle, ...style }, targetContainer);
-  }
-}
-
-register(ExtensionCategory.EDGE, 'label-edge', LabelEdge);
+// 现在使用 G6 内置的 Polyline 和 labelText，不需要自定义边类
 
 const graphRef = ref<Graph | null>(null);
 
@@ -561,7 +487,7 @@ const initGraph = async () => {
       },
     },
     edge: {
-      type: 'label-edge',
+      type: 'polyline',
       style: {
         stroke: '#CED4D9',
         lineWidth: 1,
@@ -657,13 +583,6 @@ const initGraph = async () => {
   graph.on('canvas:click', () => {
     hideClickTooltip();
     hideHoverTooltip();
-  });
-
-  // 监听节点展开/折叠后的布局更新事件，重新渲染边以更新标签位置
-  graph.on(GraphEvent.AFTER_LAYOUT, () => {
-    // 布局完成后，强制更新所有边的渲染
-    // 使用 draw 方法重新绘制图形
-    graph.draw();
   });
 
   graph.render();
