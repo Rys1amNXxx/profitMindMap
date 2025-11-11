@@ -70,7 +70,6 @@ const TAG_MIN_WIDTH = 36;
 const COLLAPSED_SIZE: [number, number] = [288, 72];
 const EXPANDED_SIZE: [number, number] = [288, 180];
 const BASE_VERTICAL_GAP = 10;
-const ROOT_VERTICAL_GAP = 10;
 const EXPANDED_VERTICAL_GAP = 12;
 const BASE_HORIZONTAL_GAP = 50;
 const COLLAPSE_TARGET_NAME = 'collapse-button';
@@ -298,77 +297,6 @@ class TreeNode extends Rect {
     this.upsert('price', GText, priceStyle, container);
   }
 
-  getCurrencyStyle(attributes) {
-    const [, height] = this.getSize(attributes);
-    return {
-      x: this.shapeMap['price'].getLocalBounds().max[0] + 4,
-      y: height / 2 - 8,
-      text: this.data.currency,
-      fontSize: 12,
-      fill: '#000',
-      opacity: 0.75,
-    };
-  }
-
-  drawCurrencyShape(attributes, container) {
-    const currencyStyle = this.getCurrencyStyle(attributes);
-    this.upsert('currency', GText, currencyStyle, container);
-  }
-
-  getPercentStyle(attributes) {
-    const [width, height] = this.getSize(attributes);
-    return {
-      x: width / 2 - 4,
-      y: height / 2 - 8,
-      text: `${((Number(this.data.variableValue) || 0) * 100).toFixed(2)}%`,
-      fontSize: 8,
-      textAlign: 'right',
-      fill: COLORS[this.data.status],
-    };
-  }
-
-  drawPercentShape(attributes, container) {
-    const percentStyle = this.getPercentStyle(attributes);
-    this.upsert('percent', GText, percentStyle, container);
-  }
-
-  getTriangleStyle(attributes) {
-    const percentMinX = this.shapeMap['percent'].getLocalBounds().min[0];
-    const [, height] = this.getSize(attributes);
-    return {
-      fill: COLORS[this.data.status],
-      x: this.data.variableUp ? percentMinX - 18 : percentMinX,
-      y: height / 2 - 16,
-      fontFamily: 'iconfont',
-      fontSize: 10,
-      text: '\ue62d',
-      transform: this.data.variableUp ? [] : [['rotate', 180]],
-    };
-  }
-
-  drawTriangleShape(attributes, container) {
-    const triangleStyle = this.getTriangleStyle(attributes);
-    this.upsert('triangle', Label, triangleStyle, container);
-  }
-
-  getVariableStyle(attributes) {
-    const [, height] = this.getSize(attributes);
-    return {
-      fill: '#000',
-      fontSize: 12,
-      opacity: 0.45,
-      text: this.data.variableName,
-      textAlign: 'right',
-      x: this.shapeMap['triangle'].getLocalBounds().min[0] - 4,
-      y: height / 2 - 8,
-    };
-  }
-
-  drawVariableShape(attributes, container) {
-    const variableStyle = this.getVariableStyle(attributes);
-    this.upsert('variable', GText, variableStyle, container);
-  }
-
   getCollapseStyle(attributes) {
     if (this.childrenData.length === 0) return false;
     const { collapsed } = attributes;
@@ -414,47 +342,13 @@ class TreeNode extends Rect {
         stopPointerPropagation(event);
         const { collapsed } = this.attributes;
         const graph = this.context.graph;
-
-        const camera = graph.getCanvas().getCamera();
-        const zoom = camera.getZoom();
-        const position = camera.getPosition();
-        const focus = graph.getViewportCenter();
-
         if (collapsed) {
           graph.expandElement(this.id);
         } else {
           graph.collapseElement(this.id);
         }
-        graph.once(GraphEvent.AFTER_LAYOUT, () => {
-          if (graph.destroyed) return;
-          camera.setZoom(zoom);
-          camera.setPosition(position.x, position.y);
-          graph.focusViewport(focus);
-        });
-        graph.layout();
       });
     }
-  }
-
-  getProcessBarStyle(attributes) {
-    const { rate, status } = this.data;
-    const { radius } = attributes;
-    const color = COLORS[status];
-    const percent = `${Number(rate) * 100}%`;
-    const [width, height] = this.getSize(attributes);
-    return {
-      x: -width / 2,
-      y: height / 2 - 4,
-      width: width,
-      height: 4,
-      radius: [0, 0, radius, radius],
-      fill: `linear-gradient(to right, ${color} ${percent}, ${GREY_COLOR} ${percent})`,
-    };
-  }
-
-  drawProcessBarShape(attributes, container) {
-    const processBarStyle = this.getProcessBarStyle(attributes);
-    this.upsert('process-bar', GRect, processBarStyle, container);
   }
 
   getKeyStyle(attributes) {
@@ -507,17 +401,20 @@ class TreeNode extends Rect {
     const backgroundWidth = Math.max(TAG_MIN_WIDTH, tagTextWidth + TAG_HORIZONTAL_PADDING);
     const backgroundHeight = tagFontSize + TAG_VERTICAL_PADDING;
 
+    const tagText = this.data.tag as string;
+    const isCoreCashCow = tagText === '核心现金牛';
+
     return {
-      backgroundFill: '#FFF1F0',         // 浅红底
-      backgroundStroke: '#FF4D4F',       // 红色边框
+      backgroundFill: isCoreCashCow ? '#FFF1F0' : '#7684961F',
+      backgroundStroke: isCoreCashCow ? '#FF4D4F' : '#7684961F',
       backgroundRadius: 4,
       backgroundWidth,
       backgroundHeight,
       x,
       y,
-      text: this.data.tag,
+      text: tagText,
       fontSize: tagFontSize,
-      fill: '#FF4D4F'
+      fill: isCoreCashCow ? '#FF4D4F' : '#768496',
     };
   }
 
@@ -533,15 +430,7 @@ class TreeNode extends Rect {
     super.render(attributes, container);
     this.drawTagShape(attributes, container);
     this.drawPriceShape(attributes, container);
-    // this.drawCurrencyShape(attributes, container);
-    // this.drawPercentShape(attributes, container);
-    // this.drawTriangleShape(attributes, container);
-    // this.drawVariableShape(attributes, container);
-    // this.drawProcessBarShape(attributes, container);
     this.drawCollapseShape(attributes, container);
-
-    // this.drawDecryptShape(attributes, container);
-    // this.drawDetailContent(attributes, container);
   }
 }
 
@@ -594,21 +483,16 @@ const initGraph = async () => {
   // 创建一个变量来存储 graph 引用，用于布局函数中访问
   let graphInstance: Graph | null = null;
 
-  // 创建一个映射来存储节点的父节点信息
-  const parentMap = new Map<string, string>();
+  const nodeHasChildrenMap = new Map<string, boolean>();
 
-  // 递归遍历数据，建立父子关系映射
-  const buildParentMap = (node: any, parentId?: string) => {
-    if (parentId) {
-      parentMap.set(node.id, parentId);
-    }
-    if (node.children) {
-      node.children.forEach((child: any) => {
-        buildParentMap(child, node.id);
-      });
+  const buildNodeMaps = (node: any) => {
+    const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+    nodeHasChildrenMap.set(node.id, hasChildren);
+    if (hasChildren) {
+      node.children.forEach((child: any) => buildNodeMaps(child));
     }
   };
-  buildParentMap(data);
+  buildNodeMaps(data);
 
   const graph = new Graph({
     container: 'container',
@@ -676,64 +560,10 @@ const initGraph = async () => {
         }
       },
       getVGap: (node?: any) => {
-        // 如果没有节点数据或 graph 实例，返回默认间距
-        if (!node || !graphInstance) return BASE_VERTICAL_GAP;
-
-        try {
-          // 获取当前节点的 ID（支持多种格式）
-          let nodeId: string | undefined;
-          if (typeof node === 'string') {
-            nodeId = node;
-          } else if (node.id) {
-            nodeId = node.id;
-          } else if (node.data?.id) {
-            nodeId = node.data.id;
-          }
-
-          if (!nodeId) return BASE_VERTICAL_GAP;
-
-          // 通过 parentMap 查找父节点
-          const parentId = parentMap.get(nodeId);
-
-          if (parentId) {
-            // 根节点（id 为 'root'）默认是展开的，所以根节点的子节点之间应该有更大的间距
-            if (parentId === 'root') {
-              return ROOT_VERTICAL_GAP;
-            }
-
-            // 如果有父节点，检查父节点是否展开了子节点
-            try {
-              const parentData = graphInstance?.getNodeData(parentId);
-              if (parentData) {
-                const parentCollapsed = parentData.style?.collapsed ?? true;
-                // 如果父节点展开了子节点（collapsed 为 false），返回更大的间距
-                // 这样父节点的所有子节点之间都会有更大的间距
-                return parentCollapsed ? BASE_VERTICAL_GAP : EXPANDED_VERTICAL_GAP;
-              }
-            } catch (e) {
-              // 如果获取父节点数据失败，返回默认间距
-            }
-          }
-
-          // 如果没有父节点（根节点），检查当前节点本身是否有子节点且展开
-          try {
-            const nodeData = graphInstance?.getNodeData(nodeId);
-            if (nodeData) {
-              const children = nodeData?.children;
-              if (children && children.length > 0) {
-                const collapsed = nodeData?.style?.collapsed ?? true;
-                return collapsed ? BASE_VERTICAL_GAP : EXPANDED_VERTICAL_GAP;
-              }
-            }
-          } catch (e) {
-            // 如果获取节点数据失败，继续使用默认值
-          }
-
-          return BASE_VERTICAL_GAP;
-        } catch (e) {
-          // 如果获取数据失败，返回默认间距
-          return BASE_VERTICAL_GAP;
-        }
+        if (!node) return BASE_VERTICAL_GAP;
+        const nodeId = typeof node === 'string' ? node : node.id ?? node.data?.id;
+        if (!nodeId) return BASE_VERTICAL_GAP;
+        return nodeHasChildrenMap.get(nodeId) ? EXPANDED_VERTICAL_GAP : BASE_VERTICAL_GAP;
       },
       getHGap: () => BASE_HORIZONTAL_GAP,
     },
@@ -899,8 +729,8 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   border-radius: 14px;
-  font-weight: 400;
-  color: #000000;
+  font-weight: 600;
+  color: #4A5465;
   font-size: 14px;
   line-height: 1.4;
   /* box-shadow: 0 8px 16px rgba(22, 119, 255, 0.15); */
