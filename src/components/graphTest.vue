@@ -423,26 +423,54 @@ register(ExtensionCategory.NODE, 'tree-node', TreeNode);
 
 // 自定义边：在边的终点显示标签（百分比）
 class LabelEdge extends Polyline {
-  render(attributes: any = this.parsedAttributes, container?: any) {
+  private layoutListener?: () => void;
+
+  private ensureLayoutListener() {
+    if (this.layoutListener) return;
+    const graph = this.context?.graph;
+    if (!graph?.on) return;
+    this.layoutListener = () => {
+      this.drawEndLabel(this.parsedAttributes, this);
+    };
+    graph.on(GraphEvent.AFTER_LAYOUT, this.layoutListener);
+  }
+
+  render(attributes: any = this.parsedAttributes, container: any = this) {
+    this.ensureLayoutListener();
     super.render(attributes, container);
     // 只在终点（子节点侧）显示百分比
     this.drawEndLabel(attributes, container);
   }
 
+  update(attributes: any = this.parsedAttributes, container: any = this) {
+    super.update(attributes);
+    this.drawEndLabel(this.parsedAttributes, container);
+  }
+
+  destroy(): void {
+    const graph = this.context?.graph;
+    if (this.layoutListener && graph?.off) {
+      graph.off(GraphEvent.AFTER_LAYOUT, this.layoutListener);
+      this.layoutListener = undefined;
+    }
+    super.destroy();
+  }
+
   drawEndLabel(attributes: any, container: any) {
+    const targetContainer = container ?? this;
     const style = subStyleProps(attributes, 'endLabel');
     const text = style?.text;
 
     // 如果没有文本，则不显示标签
     if (!text) {
-      this.upsert('label-end', GText, false, container);
+      this.upsert('label-end', GText, false, targetContainer);
       return;
     }
 
     // 获取边的路径点
     const points = this.getPoints(attributes);
     if (!points || points.length === 0) {
-      this.upsert('label-end', GText, false, container);
+      this.upsert('label-end', GText, false, targetContainer);
       return;
     }
 
@@ -463,7 +491,7 @@ class LabelEdge extends Polyline {
       text,
     };
 
-    this.upsert('label-end', GText, { ...fontStyle, ...style }, container);
+    this.upsert('label-end', GText, { ...fontStyle, ...style }, targetContainer);
   }
 }
 
@@ -514,7 +542,7 @@ const initGraph = async () => {
             source: source.id,
             target: target.id,
             style: {
-              endLabelText: percentage,
+              labelText: percentage,
             }
           };
         }
@@ -543,6 +571,7 @@ const initGraph = async () => {
         endArrow: true,
         endArrowType: 'circle',
         radius: 8,
+        // labelText: '100%',
       },
     },
     layout: {
